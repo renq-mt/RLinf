@@ -57,7 +57,7 @@ class WanEnv(gym.Env):
     """
 
     def __init__(
-        self, cfg, num_envs, seed_offset: int, total_num_processes, record_metrics=True, device='musa'
+        self, cfg, num_envs, seed_offset: int, total_num_processes, record_metrics=True
     ):
         """Initializes the WorldModelEnv with configuration and setup parameters.
 
@@ -97,7 +97,12 @@ class WanEnv(gym.Env):
         self.task_dataset = LeRobotDatasetWrapper(**dataset_cfg)
         self.total_num_group_envs = len(self.task_dataset)
         self.camera_names = self.task_dataset.camera_names
-
+        if torch.cuda.is_available():
+            device = 'cuda'
+        elif torch.musa.is_available():
+            device = 'musa'
+        else:
+            device = 'cpu'
         self.device = device
         self.env = WanInference(
             cfg.backend_cfg, self.task_dataset, self.device)

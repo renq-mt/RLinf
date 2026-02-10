@@ -70,7 +70,8 @@ class WanInference(BaseFakeModelInference):
         # 加载模型和创建pipeline
         self._init_episodes_structure()
         self._load_model()
-        self._load_reward_model()
+        if self.cfg.vllm_base_url is not None:
+            self._load_reward_model()
 
     def _load_model(self):
         # 加载配置文件
@@ -96,7 +97,7 @@ class WanInference(BaseFakeModelInference):
         self.videogen_pipeline = pipe
 
     def _load_reward_model(self):
-        model_path = '/workspace/qian.ren/robot_vla/models/Qwen/Qwen2.5-VL-3B-Instruct'
+        model_path = self.cfg.vllm_model
         self.reward_model = AutoModelForImageTextToText.from_pretrained(
             model_path, torch_dtype="auto", device_map=self.device
         )
@@ -419,13 +420,13 @@ class WanInference(BaseFakeModelInference):
                 # 这样可以确保远程服务器收到的每个视角文件都是唯一的
                 unique_video_path = generate_video_path(self.cfg.tmp_video)
                 save_video(video, unique_video_path, fps=8)
-
-                # 调用远程服务器，传入任务描述和唯一的视频路径
-                # reward_text = remote_server_reward(task_text, unique_video_path)
-
-                # 调用本地模型
-                reward_text = self._compute_reward(
-                    task_text, unique_video_path)
+                if self.cfg.vllm_base_url is not None:
+                    # 调用远程服务器，传入任务描述和唯一的视频路径
+                    reward_text = remote_server_reward(task_text, unique_video_path,base_url=self.cfg.vllm_base_url)
+                else:
+                    # 调用本地模型
+                    reward_text = self._compute_reward(
+                        task_text, unique_video_path)
 
                 # 解析逻辑：包含 success 记为 1.0
                 cam_reward = 1.0 if 'success' in reward_text.lower() else 0.0

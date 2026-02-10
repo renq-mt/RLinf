@@ -1,5 +1,6 @@
 env:
   train:
+    env_type: wan
     simulator_type: wan
     simulator_name: wan
     task_suite_name: jesbu1/bridge_v2_lerobot
@@ -19,7 +20,7 @@ env:
       video_base_dir: /tmp/video/train
     dataset_cfg:
       repo_id: local/unseen
-      root: /workspace/qian.ren/robot_vla/datasets/bridge_orig_lerobot
+      root: /data/qian.ren/robot_vla/datasets/bridge_orig_lerobot
       revision: v2.0
       start_select_policy: first_frame
       target_select_policy: last_frame
@@ -39,8 +40,8 @@ env:
       action_length: 16
       tmp_video: /tmp/video/tmp_video/
       model_cfg:
-        model_folder: /workspace/qian.ren/robot_vla/models
-        checkpoint_file: /workspace/qian.ren/robot_vla/models/train/Wan2.1-Fun-V1.1-1.3B-InP_action_state_multiview/step-500.safetensors
+        model_folder: /data/qian.ren/robot_vla/models
+        checkpoint_file: /data/qian.ren/robot_vla/models/train/Wan2.1-Fun-V1.1-1.3B-InP_action_state_multiview/step-500.safetensors
         model_id: Wan2.1-Fun-V1.1-1.3B-InP
         num_frames: 17
         video_size:
@@ -48,9 +49,10 @@ env:
         - 256
         infer_num_sampling_steps: 50
         guidance_scale: 1.0
-      # episodes_list: /workspace/shiyu.yang/data/bridge_orig_lerobot/multiview_ids/train_ids.txt
+      # episodes_list: /data/shiyu.yang/data/bridge_orig_lerobot/multiview_ids/train_ids.txt
     total_num_envs: 64
   eval:
+    env_type: wan
     simulator_type: wan
     simulator_name: wan
     task_suite_name: jesbu1/bridge_v2_lerobot
@@ -70,7 +72,7 @@ env:
       video_base_dir: /tmp/video/eval
     dataset_cfg:
       repo_id: local/unseen
-      root: /workspace/qian.ren/robot_vla/RLinf/datasets/bridge_orig_lerobot
+      root: /data/qian.ren/robot_vla/RLinf/datasets/bridge_orig_lerobot
       revision: v2.0
       start_select_policy: first_frame
       target_select_policy: last_frame
@@ -90,8 +92,8 @@ env:
       action_length: 16
       tmp_video: /tmp/tmp_video/
       model_cfg:
-        model_folder: /workspace/qian.ren/robot_vla/models
-        checkpoint_file: /workspace/qian.ren/robot_vla/models/train/Wan2.1-Fun-V1.1-1.3B-InP_action_state_multiview/step-500.safetensors
+        model_folder: /data/qian.ren/robot_vla/models
+        checkpoint_file: /data/qian.ren/robot_vla/models/train/Wan2.1-Fun-V1.1-1.3B-InP_action_state_multiview/step-500.safetensors
         model_id: Wan2.1-Fun-V1.1-1.3B-InP
         num_frames: 17
         video_size:
@@ -99,7 +101,7 @@ env:
         - 256
         infer_num_sampling_steps: 50
         guidance_scale: 1.0
-      # episodes_list: /workspace/shiyu.yang/data/bridge_orig_lerobot/multiview_ids/test_ids.txt
+      # episodes_list: /data/shiyu.yang/data/bridge_orig_lerobot/multiview_ids/test_ids.txt
     total_num_envs: 64
     is_eval: true
   group_name: EnvGroup
@@ -107,12 +109,12 @@ env:
 actor:
   model:
     model_type: gr00t
-    model_path: /workspace/qian.ren/robot_vla/RLinf/models/gr00t-n1.5-bridge-posttrain
+    model_path: /data/qian.ren/robot_vla/models/gr00t-n1.5-bridge-posttrain
     precision: bf16
     trust_remote_code: true
     is_lora: false
     action_dim: 7
-    num_action_chunks: 15
+    num_action_chunks: 16
     denoising_steps: 4
     policy_setup: widowx_bridge
     obs_converter_type: wan
@@ -124,6 +126,7 @@ actor:
       ignore_last: false
       safe_get_logprob: false
       noise_anneal: false
+      use_vlm_value: False
       noise_params:
       - 0.7
       - 0.3
@@ -134,6 +137,7 @@ actor:
       detach_critic_input: true
       valid_action_dim: 7
       disable_dropout: true
+      padding_value: 570
   fsdp_config:
     strategy: fsdp
     sharding_strategy: full_shard
@@ -159,7 +163,7 @@ actor:
   group_name: ActorGroup
   training_backend: fsdp
   micro_batch_size: 64
-  global_batch_size: 512
+  global_batch_size: 256
   seed: 1234
   enable_offload: false
   optim:
@@ -174,11 +178,12 @@ actor:
 cluster:
   num_nodes: 1
   component_placement:
-    actor,env,rollout:: all
+    actor: 4,5,6,7
+    env,rollout: 4,5,6,7
 runner:
   task_type: embodied
   logger:
-    log_path: /workspace/qian.ren/robot_vla/RLinf/logs/20260204-06:41:41
+    log_path: /data/qian.ren/robot_vla/RLinf/logs/20260204-06:41:41
     project_name: rlinf
     experiment_name: wan_ppo_gr00t_bridge
     logger_backends:
@@ -188,7 +193,7 @@ runner:
   only_eval: false
   eval_policy_path: null
   val_check_interval: -1
-  save_interval: 10
+  save_interval: 1
   seq_length: 4096
   max_prompt_length: 30
   resume_dir: null
@@ -236,7 +241,7 @@ rollout:
   enable_offload: true
   pipeline_stage_num: 1
   model:
-    model_path: /workspace/qian.ren/robot_vla/RLinf/models/gr00t-n1.5-bridge-posttrain
+    model_path: /data/qian.ren/robot_vla/models/gr00t-n1.5-bridge-posttrain
     precision: bf16
 reward:
   use_reward_model: false
