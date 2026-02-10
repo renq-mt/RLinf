@@ -227,7 +227,7 @@ class AcceleratorUtil:
         Returns:
             str: The CCL backend.
         """
-        if accelerator_type == AcceleratorType.NO_ACCEL:
+        if accelerator_type == AcceleratorType.NO_ACCEL or AcceleratorType.MUSA_GPU:
             return None
         elif accelerator_type in AcceleratorManager.manager_register:
             manager = AcceleratorManager.manager_register[accelerator_type]
@@ -276,7 +276,7 @@ class AcceleratorUtil:
         accelerator_type: AcceleratorType, options: Optional["CollectiveGroupOptions"]
     ):
         """Get the accelerator CCL process group options based on the accelerator type."""
-        if accelerator_type == AcceleratorType.NO_ACCEL:
+        if accelerator_type == AcceleratorType.NO_ACCEL or AcceleratorType.MUSA_GPU:
             return None
         elif accelerator_type in AcceleratorManager.manager_register:
             manager = AcceleratorManager.manager_register[accelerator_type]

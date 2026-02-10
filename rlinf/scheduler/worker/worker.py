@@ -313,8 +313,12 @@ class Worker(metaclass=WorkerMeta):
     logging.basicConfig()
     logger = logging.getLogger(Cluster.SYS_NAME)
     logger.setLevel(Cluster.LOGGING_LEVEL)
-    torch_platform = torch.cuda
-    torch_device_type = "cuda"
+    if torch.cuda.is_available():
+        torch_platform = torch.cuda
+        torch_device_type = "cuda"
+    elif torch.musa.is_available():
+        torch_platform = torch.musa
+        torch_device_type = "musa"
 
     def __new__(cls, *args, **kwargs):
         """Create a new instance of the Worker class."""
@@ -802,7 +806,7 @@ class Worker(metaclass=WorkerMeta):
         with self._lock:
             worker_addresses.sort()
             group = self._collective.create_collective_group(worker_addresses)
-
+        
         return group.broadcast(
             object=object,
             src_addr=src_addr,

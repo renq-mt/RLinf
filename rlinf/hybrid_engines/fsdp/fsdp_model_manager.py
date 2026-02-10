@@ -86,9 +86,12 @@ class FSDPModelManager:
             self._cfg, world_size, self._dp_group, self._logger
         )
         self.amp_context = self._create_amp_context()
-
-        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
-        self.device = torch.cuda.current_device()
+        if torch.cuda.is_available():
+            torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+            self.device = torch.cuda.current_device()
+        else:
+            torch.musa.set_device(int(os.environ["LOCAL_RANK"]))
+            self.device = torch.musa.current_device()
 
         self.is_weight_offloaded = False
         self.is_optimizer_offloaded = False
@@ -110,9 +113,10 @@ class FSDPModelManager:
         precision = torch_dtype_from_precision(self._cfg.fsdp_config.amp.precision)
 
         self._logger.info(f"[FSDP] AMP is enabled with precision: {precision}.")
-
-        return torch.amp.autocast(device_type="cuda", dtype=precision)
-
+        if torch.cuda.is_available():
+            return torch.amp.autocast(device_type='cuda', dtype=precision)
+        elif torch.musa.is_available():
+            return torch.amp.autocast(device_type='musa', dtype=precision)
     def model_provider_func(self) -> torch.nn.Module:
         """
         Initialize model used by FSDP actor
@@ -126,9 +130,14 @@ class FSDPModelManager:
 
         use_triton = cfg.get("use_triton", True)
 
-        assert torch.cuda.is_available(), "CUDA is not available."
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        device = torch.device(f"cuda:{local_rank}")
+        if torch.cuda.is_available():
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            device = torch.device(f"cuda:{local_rank}")
+        elif torch.musa.is_available():
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            device = torch.device(f"musa:{local_rank}")
+        else:
+            raise ValueError('Deivce(Cuda,Musa) not avaliable')
 
         model_config = AutoConfig.from_pretrained(
             cfg.model.model_path,

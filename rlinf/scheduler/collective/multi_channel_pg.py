@@ -170,7 +170,7 @@ class MultiChannelProcessGroup:
                     if i > 0
                     else base_group
                 )
-
+                print(base_group,self._accel_ccl_backend,group_name + f"{self._accel_ccl_backend}_recv_{i}",pg_options)
                 self._recv_accel_ccl_process_groups[i] = (
                     MultiChannelProcessGroup._split_process_group(
                         base_group=base_group,
@@ -545,7 +545,6 @@ class MultiChannelProcessGroup:
 
         if group_name is None:
             group_name = _process_group_name(ranks, use_hashed_name=False)
-
         pg, _ = MultiChannelProcessGroup._new_process_group_helper(
             base_group,
             group_world_size,
