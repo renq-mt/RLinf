@@ -219,6 +219,8 @@ class MultiStepRolloutWorker(Worker):
             async_op=True,
             options=self._sync_weight_comm_options,
         ).async_wait()
+        for k,v in param_state_dict.items():
+            param_state_dict[k] = v.to(self.device)
 
         self.hf_model.load_state_dict(param_state_dict)
         self.model_weights_id = (

@@ -179,7 +179,7 @@ class AcceleratorUtil:
 
     # To support an accelerator's CCL,
     # the `_new_process_group_helper` functions of `mult_channel_pg` need to be implemented
-    CCL_SUPPORT_LIST = [AcceleratorType.NV_GPU, AcceleratorType.AMD_GPU]
+    CCL_SUPPORT_LIST = [AcceleratorType.NV_GPU, AcceleratorType.AMD_GPU,AcceleratorType.MUSA_GPU]
 
     @staticmethod
     def get_accelerator_env_var(
@@ -227,7 +227,7 @@ class AcceleratorUtil:
         Returns:
             str: The CCL backend.
         """
-        if accelerator_type == AcceleratorType.NO_ACCEL or AcceleratorType.MUSA_GPU:
+        if accelerator_type == AcceleratorType.NO_ACCEL:
             return None
         elif accelerator_type in AcceleratorManager.manager_register:
             manager = AcceleratorManager.manager_register[accelerator_type]
@@ -276,7 +276,7 @@ class AcceleratorUtil:
         accelerator_type: AcceleratorType, options: Optional["CollectiveGroupOptions"]
     ):
         """Get the accelerator CCL process group options based on the accelerator type."""
-        if accelerator_type == AcceleratorType.NO_ACCEL or AcceleratorType.MUSA_GPU:
+        if accelerator_type == AcceleratorType.NO_ACCEL:
             return None
         elif accelerator_type in AcceleratorManager.manager_register:
             manager = AcceleratorManager.manager_register[accelerator_type]
