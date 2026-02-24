@@ -31,9 +31,15 @@ from torch.optim import Optimizer
 
 def clear_memory(sync=True):
     if sync:
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif torch.musa.is_available():
+            torch.musa.synchronize()
     gc.collect()
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.musa.is_available():
+        torch.musa.empty_cache()
 
 
 def apply_func_to_dict(func, dictionary):
@@ -48,7 +54,7 @@ def move_to_device_if_tensor(device, item):
 
 cuda_dict = partial(apply_func_to_dict, partial(move_to_device_if_tensor, "cuda"))
 cpu_dict = partial(apply_func_to_dict, partial(move_to_device_if_tensor, "cpu"))
-
+musa_dict = partial(apply_func_to_dict, partial(move_to_device_if_tensor, "musa_dict"))
 
 def retrieve_model_state_dict_in_cpu(model, offloaded_buffer=None):
     """get a copy of the model states in CPU"""
@@ -68,8 +74,10 @@ def retrieve_model_state_dict_in_cpu(model, offloaded_buffer=None):
                 offloaded_buffer[name] = item
         else:
             offloaded_buffer[name] = item
-
-    torch.cuda.synchronize()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.musa.is_available():
+        torch.musa.synchronize()
     return offloaded_buffer
 
 

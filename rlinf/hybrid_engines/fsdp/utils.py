@@ -73,8 +73,12 @@ def create_device_mesh(world_size, fsdp_size):
 
 def init_fn(x: torch.nn.Module):
     if not torch.distributed.get_rank() == 0:
-        x = x.to_empty(device=torch.cuda.current_device(), recurse=False)
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            x = x.to_empty(device=torch.cuda.current_device(), recurse=False)
+            torch.cuda.empty_cache()
+        elif torch.musa.is_available():
+            x = x.to_empty(device=torch.musa.current_device(), recurse=False)
+            torch.musa.empty_cache()
     return x
 
 
@@ -511,12 +515,14 @@ def get_grad_norm(
         return 0.0
 
     total_norm = 0.0
-
+    device="cuda"
+    if torch.musa.is_available():
+        device="musa"
     # Calculate norm.
     if norm_type == torch.inf:
         total_norm = max(grad.abs().max().item() for grad in grads_for_norm)
         total_norm_cuda = torch.tensor(
-            [float(total_norm)], dtype=torch.float, device="cuda"
+            [float(total_norm)], dtype=torch.float, device=device
         )
         # Take max across all data-parallel GPUs if using FSDP and then all model-parallel GPUs.
         if dp_group is not None:

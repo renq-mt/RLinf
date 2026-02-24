@@ -497,7 +497,7 @@ class FSDPActor(FSDPModelManager, Worker):
                 multi_modal_inputs[key] = torch.cat(
                     [inputs[key] for inputs in m_batch["multi_modal_inputs"]],
                     dim=0,
-                ).cuda()
+                ).to(self.device)
 
         if self.enable_dynamic_batch_size:
             max_seq_len_pack = self.max_tokens_per_mbs
@@ -732,7 +732,7 @@ class FSDPActor(FSDPModelManager, Worker):
                 is_last_micro_batch=(idx + 1) == micro_batch_cnt,
             )
             for k, v in m_batch.items():
-                m_batch[k] = v.cuda() if isinstance(v, torch.Tensor) else v
+                m_batch[k] = v.to(self.device) if isinstance(v, torch.Tensor) else v
 
             # batch for forward
             logprobs, entropy = self.forward_batch(m_batch, True)
@@ -778,13 +778,13 @@ class FSDPActor(FSDPModelManager, Worker):
                 task_type=self.task_type,
             )
 
-            entropy_loss = torch.tensor(0.0, device=torch.cuda.current_device())
+            entropy_loss = torch.tensor(0.0, device=self.device)
             if self.calculate_entropy:
                 entropy_loss = self.loss_agg_func(entropy, mask=loss_mask)
                 if self.calculate_entropy_loss:
                     loss = loss - self.cfg.algorithm.entropy_bonus * entropy_loss
 
-            kl_loss = torch.tensor(0.0, device=torch.cuda.current_device())
+            kl_loss = torch.tensor(0.0, device=self.device)
             if self.kl_beta > 0 and ref_logprobs is not None:
                 kld = kl_penalty(ref_logprobs, logprobs, self.kl_penalty_type)
                 kl_loss = self.loss_agg_func(kld, loss_mask)
@@ -954,15 +954,15 @@ class FSDPActor(FSDPModelManager, Worker):
                 advantages, _ = calculate_adv_and_returns(
                     task_type=self.task_type,
                     adv_type=self.cfg.algorithm.adv_type,
-                    rewards=batch["rewards"].cuda(),
-                    loss_mask=mask.cuda(),
+                    rewards=batch["rewards"].to(self.device),
+                    loss_mask=mask.to(self.device),
                     group_size=self.cfg.algorithm.group_size,
                     kl_beta=self.reinpp_kl_beta,
                     kl_penalty_type=self.kl_penalty_type,
-                    logprob=batch["prev_logprobs"].cuda()
+                    logprob=batch["prev_logprobs"].to(self.device)
                     if "prev_logprobs" in batch
                     else None,
-                    ref_logprob=batch["ref_logprobs"].cuda()
+                    ref_logprob=batch["ref_logprobs"].to(self.device)
                     if "ref_logprobs" in batch
                     else None,
                     use_reinpp_baseline=self.cfg.algorithm.get(
@@ -1345,7 +1345,7 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
                 self.optimizer.zero_grad()
                 for idx, batch in enumerate(train_micro_batch):
                     batch = put_tensor_device(
-                        batch, f"cuda:{int(os.environ['LOCAL_RANK'])}"
+                        batch, self.device
                     )
                     backward_ctx = self.before_micro_batch(
                         self.model,
@@ -1419,7 +1419,7 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
                     }
                     loss, metrics_data = policy_loss(**kwargs)
 
-                    entropy_loss = torch.tensor(0.0, device=torch.cuda.current_device())
+                    entropy_loss = torch.tensor(0.0, device=self.device)
                     if (
                         self.cfg.algorithm.entropy_bonus > 0
                         and not kwargs["critic_warmup"]
@@ -1444,8 +1444,10 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
 
                     metrics_data["actor/total_loss"] = loss.detach().item()
                     append_to_dict(metrics, metrics_data)
-
-                torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif torch.musa.is_available():
+                    torch.musa.empty_cache()
 
                 grad_norm, lr_list = self.optimizer_step()
                 data = {
