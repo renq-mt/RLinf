@@ -91,8 +91,6 @@ class WanEnv(gym.Env):
         self.auto_reset = cfg.auto_reset
         self.use_rel_reward = cfg.use_rel_reward
         self.ignore_terminations = cfg.ignore_terminations
-        # self.gen_num_image_each_step = cfg.gen_num_image_each_step
-
         dataset_cfg = OmegaConf.to_container(cfg.dataset_cfg, resolve=True)
         self.task_dataset = LeRobotDatasetWrapper(**dataset_cfg)
         self.total_num_group_envs = len(self.task_dataset)
@@ -105,7 +103,7 @@ class WanEnv(gym.Env):
             device = 'cpu'
         self.device = device
         self.env = WanInference(
-            cfg.backend_cfg, self.task_dataset, self.device)
+            cfg.backend_cfg, self.num_envs,self.task_dataset, self.device)
 
         self._is_start = True
         self._init_reset_state_ids()
@@ -477,8 +475,10 @@ class WanEnv(gym.Env):
         env_idx = torch.arange(0, self.num_envs, device=self.device)[dones]
         options = {"env_idx": env_idx}
         final_info = torch_clone_dict(info)
-        if self.use_fixed_reset_state_ids:
-            options.update(episode_id=self.reset_state_ids[env_idx])
+        # Update episode IDs to get different episodes on each reset
+        self.update_reset_state_ids()
+        print('episode_id',self.reset_state_ids)
+        options.update(episode_id=self.reset_state_ids[env_idx])
         extracted_obs, info = self.reset(options=options)
         info["final_observation"] = final_obs
         info["final_info"] = final_info
