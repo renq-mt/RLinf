@@ -39,6 +39,14 @@ from rlinf.hybrid_engines.fsdp.utils import (
 from rlinf.utils.utils import clear_memory
 
 
+def _is_musa_available() -> bool:
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+def _is_cuda_backend_available() -> bool:
+    return torch.cuda.is_available() and hasattr(torch._C, "_cuda_setDevice")
+
+
 class FSDPStrategy(FSDPStrategyBase):
     def wrap_model(self, model: nn.Module, device_mesh: DeviceMesh) -> FSDP:
         """
@@ -234,10 +242,12 @@ class FSDPStrategy(FSDPStrategyBase):
         Returns:
             - float: The total norm of the gradients before clipping.
         """
-        if torch.cuda.is_available():
+        if _is_musa_available():
+            device = torch.device(f"musa:{int(os.environ['LOCAL_RANK'])}")
+        elif _is_cuda_backend_available():
             device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
         else:
-            device = torch.device(f"musa:{int(os.environ['LOCAL_RANK'])}")
+            raise RuntimeError("No available accelerator backend found for FSDP.")
         max_norm = float(self.cfg.optim.clip_grad)
         norm_type = float(norm_type)
         all_handles = getattr(model, "_all_handles", None)

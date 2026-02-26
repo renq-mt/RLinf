@@ -95,12 +95,12 @@ class WanEnv(gym.Env):
         self.task_dataset = LeRobotDatasetWrapper(**dataset_cfg)
         self.total_num_group_envs = len(self.task_dataset)
         self.camera_names = self.task_dataset.camera_names
-        if torch.cuda.is_available():
-            device = 'cuda'
-        elif torch.musa.is_available():
-            device = 'musa'
+        if hasattr(torch, "musa") and torch.musa.is_available():
+            device = "musa"
+        elif torch.cuda.is_available() and hasattr(torch._C, "_cuda_setDevice"):
+            device = "cuda"
         else:
-            device = 'cpu'
+            device = "cpu"
         self.device = device
         self.env = WanInference(
             cfg.backend_cfg, self.num_envs,self.task_dataset, self.device)

@@ -52,6 +52,14 @@ from rlinf.hybrid_engines.fsdp import (
 from rlinf.scheduler import Worker
 
 
+def _is_musa_available() -> bool:
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+def _is_cuda_backend_available() -> bool:
+    return torch.cuda.is_available() and hasattr(torch._C, "_cuda_setDevice")
+
+
 class FSDPVersion(str, Enum):
     FSDP = "fsdp"
     FSDP2 = "fsdp2"
@@ -73,12 +81,12 @@ def create_device_mesh(world_size, fsdp_size):
 
 def init_fn(x: torch.nn.Module):
     if not torch.distributed.get_rank() == 0:
-        if torch.cuda.is_available():
-            x = x.to_empty(device=torch.cuda.current_device(), recurse=False)
-            torch.cuda.empty_cache()
-        elif torch.musa.is_available():
+        if _is_musa_available():
             x = x.to_empty(device=torch.musa.current_device(), recurse=False)
             torch.musa.empty_cache()
+        elif _is_cuda_backend_available():
+            x = x.to_empty(device=torch.cuda.current_device(), recurse=False)
+            torch.cuda.empty_cache()
     return x
 
 
@@ -515,9 +523,7 @@ def get_grad_norm(
         return 0.0
 
     total_norm = 0.0
-    device="cuda"
-    if torch.musa.is_available():
-        device="musa"
+    device = grads_for_norm[0].device
     # Calculate norm.
     if norm_type == torch.inf:
         total_norm = max(grad.abs().max().item() for grad in grads_for_norm)

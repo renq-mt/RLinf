@@ -14,6 +14,7 @@
 
 import io
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional, Union
 
@@ -111,7 +112,7 @@ class WanEnv(BaseWorldEnv):
     def _build_pipeline(self):
         pipe = WanVideoPipeline.from_pretrained(
             torch_dtype=torch.bfloat16,
-            device="cuda:0",
+            device=self._get_runtime_device_str(),
             model_configs=[
                 # Paths are loaded from yaml
                 ModelConfig(path=self.cfg.model_path, offload_device="cpu"),
@@ -642,7 +643,12 @@ class WanEnv(BaseWorldEnv):
         """Execute a chunk of actions - optimized version that processes chunk actions together"""
         # chunk_actions: [num_envs, chunk_steps, action_dim=8]
         self.onload()
-        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+        autocast_context = (
+            torch.amp.autocast(device_type=self.device.type, dtype=torch.bfloat16)
+            if self.device.type in {"cuda", "musa"}
+            else nullcontext()
+        )
+        with autocast_context:
             self._infer_next_chunk_frames(policy_output_action)
 
         # Update elapsed steps (incremented after inference)
@@ -727,7 +733,7 @@ class WanEnv(BaseWorldEnv):
         if self.record_metrics:
             self.success_once = self.success_once.cpu()
             self.returns = self.returns.cpu()
-        torch.cuda.empty_cache()
+        self._clear_accelerator_cache()
         self._is_offloaded = True
 
     def onload(self):

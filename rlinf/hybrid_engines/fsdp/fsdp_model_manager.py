@@ -45,6 +45,14 @@ warnings.filterwarnings(
 )
 
 
+def _is_musa_available() -> bool:
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+def _is_cuda_backend_available() -> bool:
+    return torch.cuda.is_available() and hasattr(torch._C, "_cuda_setDevice")
+
+
 class FSDPModelManager:
     """
     FSDP Model Manager for RL training
@@ -85,13 +93,20 @@ class FSDPModelManager:
         self._strategy = FSDPStrategyBase.create(
             self._cfg, world_size, self._dp_group, self._logger
         )
-        self.amp_context = self._create_amp_context()
-        if torch.cuda.is_available():
-            torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+        self.accelerator_type = self._select_accelerator_type()
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        if self.accelerator_type == "musa":
+            torch.musa.set_device(local_rank)
+            self.device = torch.musa.current_device()
+        elif self.accelerator_type == "cuda":
+            torch.cuda.set_device(local_rank)
             self.device = torch.cuda.current_device()
         else:
-            torch.musa.set_device(int(os.environ["LOCAL_RANK"]))
-            self.device = torch.musa.current_device()
+            raise RuntimeError(
+                "No available accelerator backend found for FSDP. "
+                "Expected one of cuda/musa."
+            )
+        self.amp_context = self._create_amp_context()
 
         self.is_weight_offloaded = False
         self.is_optimizer_offloaded = False
@@ -113,10 +128,16 @@ class FSDPModelManager:
         precision = torch_dtype_from_precision(self._cfg.fsdp_config.amp.precision)
 
         self._logger.info(f"[FSDP] AMP is enabled with precision: {precision}.")
-        if torch.cuda.is_available():
-            return torch.amp.autocast(device_type='cuda', dtype=precision)
-        elif torch.musa.is_available():
-            return torch.amp.autocast(device_type='musa', dtype=precision)
+        return torch.amp.autocast(device_type=self.accelerator_type, dtype=precision)
+
+    def _select_accelerator_type(self) -> str:
+        # Prefer MUSA on environments where CUDA APIs may be partially visible
+        # but unsupported.
+        if _is_musa_available():
+            return "musa"
+        if _is_cuda_backend_available():
+            return "cuda"
+        return "cpu"
     def model_provider_func(self) -> torch.nn.Module:
         """
         Initialize model used by FSDP actor
@@ -130,14 +151,14 @@ class FSDPModelManager:
 
         use_triton = cfg.get("use_triton", True)
 
-        if torch.cuda.is_available():
+        if self.accelerator_type == "cuda":
             local_rank = int(os.environ.get("LOCAL_RANK", 0))
             device = torch.device(f"cuda:{local_rank}")
-        elif torch.musa.is_available():
+        elif self.accelerator_type == "musa":
             local_rank = int(os.environ.get("LOCAL_RANK", 0))
             device = torch.device(f"musa:{local_rank}")
         else:
-            raise ValueError('Deivce(Cuda,Musa) not avaliable')
+            raise ValueError("Device(Cuda,Musa) not available")
 
         model_config = AutoConfig.from_pretrained(
             cfg.model.model_path,
