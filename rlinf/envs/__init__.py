@@ -111,14 +111,11 @@ def get_env_cls(env_type: str, env_cfg=None):
         from rlinf.envs.world_model.world_model_opensora_env import OpenSoraEnv
 
         return OpenSoraEnv
-<<<<<<< HEAD
     elif env_type == SupportedEnvType.WANWM:
         from rlinf.envs.world_model.world_model_wan_env import WanEnv
-=======
+        return WanEnv
     elif env_type == SupportedEnvType.WAN:
         from rlinf.envs.world_model.wan_env import WanEnv
->>>>>>> 73dab53 (add wan_env worldmodel)
-
         return WanEnv
     else:
         raise NotImplementedError(f"Environment type {env_type} not implemented")
