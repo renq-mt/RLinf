@@ -17,6 +17,7 @@ import math
 import torch.distributed as dist
 import numpy as np
 import base64
+import glob
 
 from io import BytesIO
 from PIL import Image
@@ -26,10 +27,18 @@ import os
 from openai import OpenAI
 
 
-def remote_server_reward(task_text, video_path, base_url="http://172.31.208.6:8000/v1"):
+def remote_server_reward(task_text, vllm_model, video_path, base_url="http://172.31.208.6:8000/v1"):
     """
     请求远程 Qwen3-VL 服务器评估机器人任务。
     返回模型原始生成的字符串，以便后续进行匹配。
+
+    Args:
+        task_text: 任务描述文本
+        video_path: 视频路径，可以是 mp4 文件或包含帧图片的文件夹目录
+        base_url: 远程服务器地址
+
+    Returns:
+        模型生成的原始文本响应
     """
     client = OpenAI(
         api_key="EMPTY",
@@ -39,32 +48,55 @@ def remote_server_reward(task_text, video_path, base_url="http://172.31.208.6:80
 
     text_template = (
         f"You will be shown a video. Determine if the robot succeeds at {task_text} Output the final answer strictly as one of : Success or Failure."
-        # f"You will be shown a video trajectory. First, evaluate the video quality and content:\n"
-        # f"1. If the video has severe quality issues (blurry, distorted, unrealistic, or clearly degraded visuals), "
-        # f"   output: terminate\n"
-        # f"2. If the video quality is acceptable, then evaluate if the robot succeeds at {task_text}.\n"
-        # f"   - If the robot clearly accomplishes the task, output: Success\n"
-        # f"   - If the robot fails to accomplish the task, output: Failure\n\n"
-        # f"Output strictly one of these three options: terminate, Success, or Failure\n"
-        # f"Do not provide explanations or additional text."
     )
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "video_url",
-                    "video_url": {"url": "file://"+video_path},
-                },
-                {"type": "text", "text": text_template},
-            ],
-        }
-    ]
+    # 判断 video_path 是文件还是目录
+    if os.path.isfile(video_path) and video_path.endswith('.mp4'):
+        # mp4 文件：使用 video_url 类型
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video_url",
+                        "video_url": {"url": "file://" + video_path},
+                    },
+                    {"type": "text", "text": text_template},
+                ],
+            }
+        ]
+    elif os.path.isdir(video_path):
+        # 文件夹目录：读取帧图片并转换为 base64
+        frames = sorted(glob.glob(os.path.join(video_path, "*.jpg")))
+        if not frames:
+            # 如果没有 jpg，尝试 png
+            frames = sorted(glob.glob(os.path.join(video_path, "*.png")))
+
+        content = []
+        for f in frames:
+            with open(f, "rb") as img_file:
+                base64_image = base64.b64encode(img_file.read()).decode('utf-8')
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                })
+
+        content.append({"type": "text", "text": text_template})
+
+        messages = [
+            {
+                "role": "user",
+                "content": content,
+            }
+        ]
+    else:
+        raise ValueError(f"video_path 必须是 mp4 文件或包含帧图片的文件夹目录: {video_path}")
 
     # 直接执行调用，不捕获异常
     response = client.chat.completions.create(
-        model="/workspace/shiyu.yang/models/Qwen3-VL-4B-Instruct",
+        model=vllm_model,
         messages=messages,
         max_tokens=50,
         temperature=0.0
@@ -74,7 +106,7 @@ def remote_server_reward(task_text, video_path, base_url="http://172.31.208.6:80
     return response.choices[0].message.content.strip()
 
 
-def generate_video_path(output_dir="temp_videos"):
+def generate_video_path(save_as='images',output_dir="temp_videos"):
     os.makedirs(output_dir, exist_ok=True)
 
     # 方案 A: UUID (最安全，适合并发)
@@ -83,7 +115,8 @@ def generate_video_path(output_dir="temp_videos"):
     # 方案 B: 时间戳 + 随机数 (可读性好)
     # timestamp = time.strftime("%Y%m%d_%H%M%S")
     # unique_id = f"{timestamp}_{uuid.uuid4().hex[:6]}"
-
+    if save_as == 'images':
+        return os.path.abspath(os.path.join(output_dir, f"v_{unique_id}"))
     return os.path.abspath(os.path.join(output_dir, f"v_{unique_id}.mp4"))
 
 
@@ -284,3 +317,41 @@ def quat2rotm(quat):
                      ])
 
     return rotm
+
+def save_video_frame(video_frames: list, save_dir: str, fps: int = 8):
+    """
+    将视频帧保存为带数字编号的jpg文件。
+    
+    Args:
+        video_frames: 视频帧列表，每帧可以是numpy数组或PIL Image
+        save_dir: 保存目录
+        fps: 帧率参数（保留以保持接口兼容，实际不使用）
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    
+    for i, frame in enumerate(video_frames):
+        # 转换为PIL Image
+        if isinstance(frame, np.ndarray):
+            # 确保维度正确并转换为uint8
+            if frame.shape[0] == 3 and len(frame.shape) == 3:  # CHW格式
+                frame = frame.transpose(1, 2, 0)
+            if frame.max() <= 1.0:
+                frame = (frame * 255).astype(np.uint8)
+            else:
+                frame = frame.astype(np.uint8)
+            frame_pil = Image.fromarray(frame)
+        elif isinstance(frame, torch.Tensor):
+            frame_np = frame.cpu().numpy()
+            if frame_np.shape[0] == 3:
+                frame_np = frame_np.transpose(1, 2, 0)
+            if frame_np.max() <= 1.0:
+                frame_np = (frame_np * 255).astype(np.uint8)
+            else:
+                frame_np = frame_np.astype(np.uint8)
+            frame_pil = Image.fromarray(frame_np)
+        else:
+            frame_pil = frame
+        
+        # 保存为带数字编号的jpg，格式：0001.jpg, 0002.jpg, ...
+        frame_path = os.path.join(save_dir, f"{i+1:04d}.jpg")
+        frame_pil.save(frame_path, quality=95)
