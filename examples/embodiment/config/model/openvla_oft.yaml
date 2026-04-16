@@ -29,9 +29,10 @@ lora_rank: 32
 lora_path: null
 num_images_in_input: 1
 attn_implementation: "flash_attention_2"
-# If True, openvla-oft loader will use eager attention implementation on MUSA.
-force_musa_eager_attn_implementation: True
-force_musa_eager_sdpa: True
+# On MUSA, flash-attn is downgraded to SDPA by default. Set either flag to True
+# only when you need the slower eager fallback for debugging or kernel issues.
+force_musa_eager_attn_implementation: False
+force_musa_eager_sdpa: False
 low_cpu_mem_usage: True
 trust_remote_code: True
 

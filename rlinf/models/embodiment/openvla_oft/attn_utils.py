@@ -22,14 +22,18 @@ def is_musa_available() -> bool:
     return hasattr(torch, "musa") and torch.musa.is_available()
 
 
-def resolve_attn_implementation(cfg: Mapping[str, Any]) -> str:
-    """Resolve attention implementation for the current device/runtime."""
-    attn_implementation = cfg.get("attn_implementation", "flash_attention_2")
+def resolve_attn_implementation(cfg: Mapping[str, Any]) -> str | None:
+    """Resolve attention implementation override for the current device/runtime."""
     force_musa_eager_attn_implementation = bool(
-        cfg.get("force_musa_eager_attn_implementation", True)
+        cfg.get("force_musa_eager_attn_implementation", False)
     )
 
     if is_musa_available() and force_musa_eager_attn_implementation:
         return "eager"
 
-    return attn_implementation
+    if is_musa_available() and cfg.get("attn_implementation") == "flash_attention_2":
+        return "sdpa"
+
+    # Match upstream CUDA behavior by not forcing an attention backend unless
+    # the MUSA fallback is explicitly needed.
+    return None

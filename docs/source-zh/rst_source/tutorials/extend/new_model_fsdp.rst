@@ -159,6 +159,6 @@
     hidden_size: 4096
     image_size: [224, 224]
     is_lora: False
-    attn_implementation: "flash_attention_2"
+    attn_implementation: "sdpa"
     low_cpu_mem_usage: True
     trust_remote_code: True

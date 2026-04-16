@@ -24,6 +24,8 @@ from transformers import (
     AutoTokenizer,
 )
 
+from rlinf.models.embodiment.openvla_oft.attn_utils import resolve_attn_implementation
+
 
 def get_model_config_and_input_processor(cfg: DictConfig):
     from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
@@ -65,9 +67,13 @@ def get_model_config_and_input_processor(cfg: DictConfig):
 def get_model(cfg: DictConfig, torch_dtype=torch.bfloat16):
     from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 
+    attn_implementation = resolve_attn_implementation(cfg)
     actor_model_config = OpenVLAConfig.from_pretrained(
         cfg.model_path, trust_remote_code=cfg.trust_remote_code
     )
+    if attn_implementation is not None:
+        setattr(actor_model_config, "attn_implementation", attn_implementation)
+        setattr(actor_model_config, "_attn_implementation", attn_implementation)
 
     dataset_statistics_path = os.path.join(cfg.model_path, "dataset_statistics.json")
     if os.path.isfile(dataset_statistics_path):
@@ -91,12 +97,15 @@ def get_model(cfg: DictConfig, torch_dtype=torch.bfloat16):
         max_prompt_length=cfg.max_prompt_length,
         action_dim=cfg.action_dim,
         num_action_chunks=cfg.num_action_chunks,
-        attn_implementation=cfg.attn_implementation,
+        attn_implementation=attn_implementation or cfg.attn_implementation,
         low_cpu_mem_usage=cfg.low_cpu_mem_usage,
         trust_remote_code=cfg.trust_remote_code,
     )
 
     model.to(torch_dtype)
+    if attn_implementation is not None and hasattr(model, "config"):
+        setattr(model.config, "attn_implementation", attn_implementation)
+        setattr(model.config, "_attn_implementation", attn_implementation)
 
     model_config, input_processor = get_model_config_and_input_processor(cfg)
     model.setup_config_and_processor(model_config, input_processor)

@@ -969,7 +969,7 @@ actor
       lora_rank: 32
       lora_path: /storage/models/oft-sft/lora_004000
       num_images_in_input: 1
-      attn_implementation: "flash_attention_2"
+      attn_implementation: "sdpa"
       low_cpu_mem_usage: True
       trust_remote_code: True
 

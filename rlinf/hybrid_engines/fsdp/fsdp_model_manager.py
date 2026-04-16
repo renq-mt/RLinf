@@ -403,7 +403,7 @@ class FSDPModelManager:
         self.device = Worker.torch_platform.current_device()
 
         force_musa_eager_sdpa = bool(
-            self._cfg.model.get("force_musa_eager_sdpa", True)
+            self._cfg.model.get("force_musa_eager_sdpa", False)
         )
         if self.accelerator_type == "musa" and force_musa_eager_sdpa:
             install_musa_eager_sdpa_fallback(logger=self._logger, rank=self._rank)
