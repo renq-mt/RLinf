@@ -88,27 +88,35 @@ def get_model(cfg: DictConfig, torch_dtype=torch.bfloat16):
     if override_config_kwargs is not None:
         for key, val in override_config_kwargs.items():
             setattr(actor_model_config, key, val)
-    setattr(actor_model_config, "attn_implementation", attn_implementation)
-    setattr(actor_model_config, "_attn_implementation", attn_implementation)
+    if attn_implementation is not None:
+        setattr(actor_model_config, "attn_implementation", attn_implementation)
+        setattr(actor_model_config, "_attn_implementation", attn_implementation)
 
-    model = OpenVLAOFTForRLActionPrediction.from_pretrained(
-        pretrained_model_name_or_path=cfg.model_path,
-        torch_dtype=torch_dtype,
-        attn_implementation=attn_implementation,
-        config=actor_model_config,
-        action_dim=cfg.action_dim,
-        num_action_chunks=cfg.num_action_chunks,
-        trust_remote_code=True,
-        add_value_head=cfg.add_value_head,
-        max_prompt_length=cfg.max_prompt_length,
-    )
+    model_kwargs = {
+        "pretrained_model_name_or_path": cfg.model_path,
+        "torch_dtype": torch_dtype,
+        "config": actor_model_config,
+        "action_dim": cfg.action_dim,
+        "num_action_chunks": cfg.num_action_chunks,
+        "trust_remote_code": True,
+        "add_value_head": cfg.add_value_head,
+        "max_prompt_length": cfg.max_prompt_length,
+    }
+    if attn_implementation is not None:
+        model_kwargs["attn_implementation"] = attn_implementation
+
+    model = OpenVLAOFTForRLActionPrediction.from_pretrained(**model_kwargs)
 
     # oft add
     model.vision_backbone.set_num_images_in_input(cfg.get("num_images_in_input", 1))
-    if hasattr(model, "config"):
+    if attn_implementation is not None and hasattr(model, "config"):
         setattr(model.config, "attn_implementation", attn_implementation)
         setattr(model.config, "_attn_implementation", attn_implementation)
-    if hasattr(model, "language_model") and hasattr(model.language_model, "config"):
+    if (
+        attn_implementation is not None
+        and hasattr(model, "language_model")
+        and hasattr(model.language_model, "config")
+    ):
         setattr(
             model.language_model.config,
             "_attn_implementation",

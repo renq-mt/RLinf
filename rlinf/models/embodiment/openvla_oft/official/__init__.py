@@ -82,17 +82,20 @@ def get_model(cfg: DictConfig, torch_dtype=torch.bfloat16):
     }
     for key, val in custom_params.items():
         setattr(model_config, key, val)
-    setattr(model_config, "attn_implementation", attn_implementation)
-    setattr(model_config, "_attn_implementation", attn_implementation)
+    if attn_implementation is not None:
+        setattr(model_config, "attn_implementation", attn_implementation)
+        setattr(model_config, "_attn_implementation", attn_implementation)
 
     # Load the model with the updated config
-    vla = OpenVLAOFTForRLActionPrediction.from_pretrained(
-        cfg.model_path,
-        config=model_config,
-        attn_implementation=attn_implementation,
-        torch_dtype=torch_dtype,
-        trust_remote_code=True,
-    )
+    model_kwargs = {
+        "pretrained_model_name_or_path": cfg.model_path,
+        "config": model_config,
+        "torch_dtype": torch_dtype,
+        "trust_remote_code": True,
+    }
+    if attn_implementation is not None:
+        model_kwargs["attn_implementation"] = attn_implementation
+    vla = OpenVLAOFTForRLActionPrediction.from_pretrained(**model_kwargs)
 
     if cfg.use_proprio:
         # Load proprio projector weights if available
@@ -118,10 +121,14 @@ def get_model(cfg: DictConfig, torch_dtype=torch.bfloat16):
     # Load processor
     processor = AutoProcessor.from_pretrained(cfg.model_path)
     vla.set_processor(processor)
-    if hasattr(vla, "config"):
+    if attn_implementation is not None and hasattr(vla, "config"):
         setattr(vla.config, "attn_implementation", attn_implementation)
         setattr(vla.config, "_attn_implementation", attn_implementation)
-    if hasattr(vla, "language_model") and hasattr(vla.language_model, "config"):
+    if (
+        attn_implementation is not None
+        and hasattr(vla, "language_model")
+        and hasattr(vla.language_model, "config")
+    ):
         setattr(
             vla.language_model.config,
             "_attn_implementation",

@@ -26,6 +26,7 @@ from rlinf.envs.wrappers import RecordVideo
 from rlinf.scheduler import Channel, Cluster, Worker
 from rlinf.utils.comm_mapping import CommMapper
 from rlinf.utils.placement import HybridComponentPlacement
+from rlinf.workers.env.init_utils import resolve_env_classes
 
 
 class EnvWorker(Worker):
@@ -90,8 +91,9 @@ class EnvWorker(Worker):
             )
         self.log_info(f"Env worker initialized with dst_ranks: {self.dst_ranks}")
         self.log_info(f"Env worker initialized with src_ranks: {self.src_ranks}")
-        train_env_cls = get_env_cls(self.cfg.env.train.env_type, self.cfg.env.train)
-        eval_env_cls = get_env_cls(self.cfg.env.eval.env_type, self.cfg.env.eval)
+        train_env_cls, eval_env_cls = resolve_env_classes(
+            self.cfg, enable_eval=self.enable_eval, get_env_cls_fn=get_env_cls
+        )
 
         # This is a barrier to ensure all envs' initial setup upon import is done
         # Essential for RealWorld env to ensure initial ROS node setup is done
@@ -99,9 +101,6 @@ class EnvWorker(Worker):
             True,
             groups=[(self._group_name, list(range(self._world_size)))],
         )
-
-        train_env_cls = get_env_cls(self.cfg.env.train.env_type, self.cfg.env.train)
-        eval_env_cls = get_env_cls(self.cfg.env.eval.env_type, self.cfg.env.eval)
 
         if not self.only_eval:
             self.env_list = self._setup_env_and_wrappers(

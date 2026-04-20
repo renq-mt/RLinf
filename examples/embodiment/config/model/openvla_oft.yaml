@@ -28,9 +28,9 @@ is_lora: False
 lora_rank: 32
 lora_path: null
 num_images_in_input: 1
-attn_implementation: "flash_attention_2"
-# On MUSA, flash-attn is downgraded to SDPA by default. Set either flag to True
-# only when you need the slower eager fallback for debugging or kernel issues.
+attn_implementation: "sdpa"
+# On MUSA, SDPA is used by default. Set either flag to True only when you need
+# the slower eager fallback for debugging or kernel issues.
 force_musa_eager_attn_implementation: False
 force_musa_eager_sdpa: False
 low_cpu_mem_usage: True
