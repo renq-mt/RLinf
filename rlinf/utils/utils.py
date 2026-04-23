@@ -17,7 +17,6 @@ import gc
 import os
 import random
 import sys
-import uuid
 from contextlib import contextmanager
 from functools import partial, wraps
 from typing import Callable, Literal, Optional
@@ -65,8 +64,8 @@ def clear_memory(sync=True):
         if torch_platform is not None and torch_platform.is_available():
             torch_platform.synchronize()
     gc.collect()
-    if torch_platform is not None and torch_platform.is_available():
-        torch_platform.empty_cache()
+    Worker.torch_platform.ipc_collect()
+    Worker.torch_platform.empty_cache()
 
 
 def apply_func_to_dict(func, dictionary):
@@ -165,7 +164,7 @@ def masked_mean(values: torch.Tensor, mask: torch.Tensor, axis=None):
 
 
 def masked_sum(values: torch.Tensor, mask: torch.Tensor, axis=None):
-    """Compute mean of tensor with a masked values."""
+    """Compute sum of tensor with a masked values."""
     return (values * mask).sum(axis=axis)
 
 
@@ -519,36 +518,5 @@ def set_rng_state(rng_state: dict) -> None:
     torch.set_rng_state(rng_state["cpu"])
     np.random.set_state(rng_state["numpy"])
     random.setstate(rng_state["random"])
-    torch_platform = _get_torch_platform()
-    torch_device_type = _get_torch_device_type()
-    if (
-        torch_platform is not None
-        and torch_device_type in rng_state
-        and hasattr(torch_platform, "set_rng_state")
-    ):
-        torch_platform.set_rng_state(rng_state[torch_device_type])
-
-
-def get_model_weights_id(model, k=128):
-    first_p = None
-    last_p = None
-
-    for _, p in model.named_parameters():
-        if not p.is_floating_point():
-            continue
-        if first_p is None:
-            first_p = p
-        last_p = p
-
-    if first_p is None or last_p is None:
-        return None
-
-    def tensor_fingerprint(p):
-        flat = p.detach().view(-1)
-        sample = flat[:k] if flat.numel() >= k else flat
-        return sample.to(dtype=torch.float32).cpu().numpy().tobytes()
-
-    name_bytes = tensor_fingerprint(first_p) + tensor_fingerprint(last_p)
-    name_str = name_bytes.hex()
-
-    return uuid.uuid5(uuid.NAMESPACE_DNS, name_str)
+    if Worker.torch_platform.is_available() and Worker.torch_device_type in rng_state:
+        Worker.torch_platform.set_rng_state(rng_state[Worker.torch_device_type])

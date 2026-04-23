@@ -148,6 +148,7 @@ class MegatronWorker(MegatronModelManager, Worker):
         self.ref_policy_state_dict = None
         self.is_pipeline = placement.is_pipeline
         self.placement_mode = placement._placement_mode
+        self.rollout_sync_mode = placement._rollout_sync_mode
         self.enable_dp_load_balance = self.role_cfg.get("enable_dp_load_balance", False)
         self.variable_seq_lengths = self.cfg.actor.model.variable_seq_lengths
         self.encoder_seq_length = self.cfg.actor.model.encoder_seq_length
@@ -214,13 +215,6 @@ class MegatronWorker(MegatronModelManager, Worker):
             )
             self.scheduler_request_queue = get_scheduler_request_queue()
             self.scheduler_response_queue = get_scheduler_response_queue()
-
-    def _load_weight(self):
-        # only weights need to be loaded for run_inference()
-        if not self.is_running:
-            return
-        with self.device_lock:
-            self.onload_model_weights_and_grad(load_grad=self.offload_grad)
 
     def _load_weight_and_optimizer(self):
         # Acquire the GPUs to ensure that no one is using them before loading models
@@ -1123,7 +1117,8 @@ class MegatronWorker(MegatronModelManager, Worker):
             return
 
         # ensure weights are on GPU before sync model to inference
-        self._load_weight()
+        with self.device_lock:
+            self.onload_model_weights_and_grad(load_grad=False)
 
         inference_state_dict = self._get_inference_model_state_dict()
 
